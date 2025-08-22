@@ -11,6 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
+While performing work with Dr. Brandt, we came across a need for visualizations in order to identify key spatiotemporal relationships in state-based violent deaths on a country-level. This document serves to outline my general process, obstacles I encountered, and solutions to said obstacles. For more information on the VIEWS Challenge please refer [here](https://viewsforecasting.org/news/the-2023-24-views-prediction-challenge-predicting-the-number-of-fatalities-in-armed-conflict-with-uncertainty/) as well as the foundational knowledge for this document [here](https://github.com/PTB-OEDA/VIEWS-Startup).
+
 ## Packages Used
 
 ## Basic Visualization
