@@ -1,0 +1,32 @@
+---
+title: 'Visualizing Key Tweedie Hyperparameters: A Spatiotemporal Problem'
+author: "Salma Khalfallah"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+## Packages Used
+
+## Basic Visualization
+
+## Data Setup
+
+# Model Fitting
+
+## Introducing the `country_fit` function
+
+##  The Zero-`sb` Problem: The Dirac Delta Function
+
+# Visualizations
+
+## Africa
+
+## The Middle East
+
+# Conclusions
