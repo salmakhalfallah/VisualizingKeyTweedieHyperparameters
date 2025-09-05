@@ -13,15 +13,127 @@ knitr::opts_chunk$set(echo = TRUE)
 
 While performing work with Dr. Brandt, we came across a need for visualizations in order to identify key spatiotemporal relationships in state-based violent deaths on a country-level. This document serves to outline my general process, obstacles I encountered, and solutions to said obstacles. For more information on the VIEWS Challenge please refer [here](https://viewsforecasting.org/news/the-2023-24-views-prediction-challenge-predicting-the-number-of-fatalities-in-armed-conflict-with-uncertainty/) as well as the foundational knowledge for this document [here](https://github.com/PTB-OEDA/VIEWS-Startup).
 
-## Packages Used
-
-## Basic Visualization
+```{r, Packages, echo=FALSE}
+library(tidyverse)
+library(rlang)
+library(sf)
+library(rnaturalearth)
+library(MASS)
+library(statmod)
+library(tweedie)
+library(HDtweedie)
+library(scoringutils) 
+```
 
 ## Data Setup
+
+```{r, DataSetup1, echo = FALSE}
+# loading in data
+load("VIEWS-alldownloaded.RData", verbose = TRUE)
+
+# creating geo datasets for africa and the middle east, respectively
+world <- ne_countries()
+africa <- ne_countries(continent = "Africa", returnclass = "sf")
+middle_east <- world |>
+  filter(name == "Iran" | name == "Turkey" | name == "Iraq" | name == "Saudi Arabia" | name == "Yemen" | name == "Syria" | name == "Jordan"
+         | name == "United Arab Emirates" | name == "Israel" | name == "Lebanon" | name == "Palestine" | name == "Oman" | name == "Kuwait"
+         | name == "Qatar" | name == "Bahrain")
+
+# merging data by country
+df <- merge(cm, countries, 
+            by.x = "country_id", by.y="id")
+
+# merging on month_id
+df <- merge(df, month_ids[,2:4],
+            by.x = "month_id", by.y="month_id")
+
+# typecasting from character to integer
+as.numeric(colnames(df) == "isonum")
+
+# make factors for countries, years, and months
+df$country_factor <- as.factor(df$isoab)
+df$year_factor <- as.factor(df$Year)
+df$month_factor <- factor(df$month_id)
+
+# filtering for 2010 data and later (since that is our range)
+df <- df |>
+  filter(month_id >= 361)
+```
+
+Before working with the final data, initial data pre-processing was required. I loaded in the initial data from a previous script, and performed basic merging of the country data to work with. As well as this, I had to ensure that our variables were all in the right data type. (this may seem trivial, however this caused me hours of confusion later down the line...) Finally, I filtered for country data from 2010 and later on. This created a spatially easier problem to work with, as opposed to data dating all the way back from 1990.
+
+```{r, DataSetup2}
+# filtering for africa data
+africa.data <- df[df$in_africa==1,]
+
+countries <- unique(africa.data$name)
+iso <- unique(africa.data$isonum)
+
+# filtering data into train and test splits
+africa.train <- africa.data |>
+  filter(month_id < 517)
+
+africa.test <- africa.data |>
+  filter(month_id > 528)
+```
+
+Dividing the data into basic training and test splits in this portion of the code
 
 # Model Fitting
 
 ## Introducing the `country_fit` function
+
+```{r, country_fit}
+
+# creating a function that fits a model based on a specific country's data using 
+# tweedie, poisson, and negative binomial distributions, as well as MLE estimations
+
+# the parameters of each distribution are saved in a vector and later outputted
+country_fit <- function(country_name, train, xi = seq(1.1, 1.9, by=0.05)) 
+{
+  country_data <- train |>
+    filter(name == country_name)
+  
+  out <- list(name = country_data$name[1], gleditsch_ward = country_data$gleditsch_ward[1], isonum = unique(country_data$isonum), phi = NULL, xi = NULL)
+  
+  sb_total <- sum(country_data$ged_sb)
+  
+  if(sb_total <= 2)
+  {
+    out$phi <- 0
+    out$xi <- 0
+    return(out)
+  }
+  
+  
+  # fitting models here
+  
+  # tweedie 
+  
+  param.tw <- tweedie.profile(ged_sb ~ year_factor, 
+                              xi.vec=xi,
+                              data = country_data,
+                              do.plot=TRUE,
+                              control=list(maxit=50),
+                              method="series",
+                              verbose=2)
+  
+  tw <- glm(ged_sb ~ year_factor, 
+            data = country_data,
+            family=statmod::tweedie(var.power=param.tw$xi.max, link.power=0),
+            control=list(maxit=50))
+  
+  out$phi <- param.tw$phi.max
+  out$xi <- param.tw$xi.max
+  
+  return(out)
+}
+
+```
+
+In order to fit the appropriate models by country in order to produce our final results, I opted to create a function that would input any arbitrary country and its appropriate training data. This function is flexible across all countries, given that the appropriate training data is provided. The intent is to be able to use the function across different purposes. (as we will be showcasing)
+
+The plan was simple: isolate country 'c', extract Tweedie parameters through MLE estimation, and organize the country 'c' information as well as its associated parameters for later visualization. While performing this seemingly basic procedure, however, I came across a problem that I had to address: the zero-'sb' problem.
 
 ##  The Zero-`sb` Problem: The Dirac Delta Function
 

@@ -1,4 +1,4 @@
-# extending NA_MLE_parameters.R to entire african continent
+# extending param visuals but to middle east this time
 
 library(tidyverse)
 library(rlang)
@@ -10,11 +10,18 @@ library(tweedie)
 library(HDtweedie)
 library(scoringutils)
 
-# plotting the entire continent
-africa <- ne_countries(continent = "Africa", returnclass = "sf")
+world <- ne_countries()
+
+# plotting the entire region
+
+middle_east <- world |>
+  filter(name == "Iran" | name == "Turkey" | name == "Iraq" | name == "Saudi Arabia" | name == "Yemen" | name == "Syria" | name == "Jordan"
+         | name == "United Arab Emirates" | name == "Israel" | name == "Lebanon" | name == "Palestine" | name == "Oman" | name == "Kuwait"
+         | name == "Qatar" | name == "Bahrain")
+  
 
 ggplot() +
-  geom_sf(data = africa)
+  geom_sf(data = middle_east)
 
 # loading in data
 load("VIEWS-alldownloaded.RData")
@@ -27,9 +34,6 @@ df <- merge(cm, countries,
 df <- merge(df, month_ids[,2:4],
             by.x = "month_id", by.y="month_id")
 
-# typecasting from character to integer
-as.numeric(colnames(df) == "isonum")
-
 # make factors for countries, years, and months
 df$country_factor <- as.factor(df$isoab)
 df$year_factor <- as.factor(df$Year)
@@ -40,16 +44,15 @@ df <- df |>
   filter(month_id >= 361)
 
 # filtering for africa data
-africa.data <- df[df$in_africa==1,]
+me.data <- df[df$in_middle_east==1,]
 
-af_countries <- unique(africa.data$name)
-af_iso <- unique(africa.data$isonum)
+me_countries <- unique(me.data$name)
 
 # filtering data into train, eval, test splits
-africa.train <- africa.data |>
+me.train <- me.data |>
   filter(month_id < 517)
 
-africa.test <- africa.data |>
+me.test <- me.data |>
   filter(month_id > 528)
 
 ## fitting models here
@@ -61,12 +64,12 @@ africa.test <- africa.data |>
 # the parameters of each distribution are saved in a vector and later outputted
 
 # note: add log(xi), log(phi) columns, remove poisson and neg. binomials
-country_fit <- function(country_name, train, xi = seq(1.1, 1.9, by=0.05)) 
+country_fit <- function(country_name, train, xi = seq(1.2, 1.8, by=0.05)) 
 {
   country_data <- train |>
     filter(name == country_name)
   
-  out <- list(name = country_data$name[1], gleditsch_ward = country_data$gleditsch_ward[1], isonum = unique(country_data$isonum), phi = NULL, xi = NULL)
+  out <- list(name = country_data$name[1], gleditsch_ward = country_data$gleditsch_ward[1], phi = NULL, xi = NULL)
   
   sb_total <- sum(country_data$ged_sb)
   
@@ -124,41 +127,37 @@ country_fit <- function(country_name, train, xi = seq(1.1, 1.9, by=0.05))
 # an empty data frame for the data from each country is created
 db <- data.frame(name = character(),
                  gleditsch_ward = integer(),
-                 isonum = integer(),
                  phi = numeric(),
-                 xi = numeric())
+                 xi = numeric(),
+                 rate = numeric(),
+                 size = numeric(),
+                 mu = numeric())
 
 # looping through every country in NA, we are inputting the country name and 
 # training data and outputting that country's fitted parameter list 
 # finally, each list is inputted into the data frame
 
-for(country in af_countries)
+for(country in me_countries)
 {
-  country_list <- (country_fit(country_name = country, train = africa.train))
+  country_list <- (country_fit(country_name = country, train = me.train))
   db <- db |>
     add_row(!!!country_list)
 }
 
 view(db)
 
-# adjusting datasets for easy merging
+# now.. visualizing !
 
-colnames(africa)[colnames(africa) == "iso_n3"] <- "isonum"
-africa$isonum <- as.numeric(africa$isonum)
-
-# DEBUG: MERGE BASED ON ISONUM INSTEAD OF NAME 
 # combining SF data with db that we just made
-AF <- merge(africa, db, by.x = "isonum", by.y = "isonum")
+ME <- merge(middle_east, db)
 
-#visualizing here...
-ggplot(data = AF) +
+# testing here
+ggplot(data = ME) +
   geom_sf(mapping = aes(fill = pop_est))
 
-# WHERE DID THE DEMOCRATIC REPUBLIC OF THE CONGO GO???????
-
-ggplot(data = AF) +
-  geom_sf(mapping = aes(fill = log(phi)))
+ggplot(data = ME) +
+  geom_sf(mapping = aes(fill = phi))
 
 # mapping xi parameters
-ggplot(data = AF) +
+ggplot(data = ME) +
   geom_sf(mapping = aes(fill = xi))
