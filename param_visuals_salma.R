@@ -122,7 +122,7 @@ country_fit <- function(country_name, train, xi = seq(1.1, 1.9, by=0.05))
 }
 
 # an empty data frame for the data from each country is created
-db <- data.frame(name = character(),
+af_db <- data.frame(name = character(),
                  gleditsch_ward = integer(),
                  isonum = integer(),
                  phi = numeric(),
@@ -148,7 +148,7 @@ africa$isonum <- as.numeric(africa$isonum)
 
 # DEBUG: MERGE BASED ON ISONUM INSTEAD OF NAME 
 # combining SF data with db that we just made
-AF <- merge(africa, db, by.x = "isonum", by.y = "isonum")
+AF <- merge(africa, af_db, by.x = "isonum", by.y = "isonum")
 
 #visualizing here...
 ggplot(data = AF) +

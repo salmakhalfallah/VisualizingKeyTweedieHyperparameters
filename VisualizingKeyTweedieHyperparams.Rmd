@@ -13,7 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 While performing work with Dr. Brandt, we came across a need for visualizations in order to identify key spatiotemporal relationships in state-based violent deaths on a country-level. This document serves to outline my general process, obstacles I encountered, and solutions to said obstacles. For more information on the VIEWS Challenge please refer [here](https://viewsforecasting.org/news/the-2023-24-views-prediction-challenge-predicting-the-number-of-fatalities-in-armed-conflict-with-uncertainty/) as well as the foundational knowledge for this document [here](https://github.com/PTB-OEDA/VIEWS-Startup).
 
-```{r, Packages, echo=FALSE}
+```{r, Packages, include=FALSE}
+library(curl)
+library(arrow)
 library(tidyverse)
 library(rlang)
 library(sf)
@@ -23,13 +25,14 @@ library(statmod)
 library(tweedie)
 library(HDtweedie)
 library(scoringutils) 
+
 ```
 
 ## Data Setup
 
-```{r, DataSetup1, echo = FALSE}
+```{r, DataSetup1, include= TRUE}
 # loading in data
-load("VIEWS-alldownloaded.RData", verbose = TRUE)
+load("VIEWS-alldownloaded.RData", verbose = FALSE)
 
 # creating geo datasets for africa and the middle east, respectively
 world <- ne_countries()
@@ -66,14 +69,26 @@ Before working with the final data, initial data pre-processing was required. I 
 # filtering for africa data
 africa.data <- df[df$in_africa==1,]
 
-countries <- unique(africa.data$name)
-iso <- unique(africa.data$isonum)
+af_countries <- unique(africa.data$name)
+af_iso <- unique(africa.data$isonum)
 
 # filtering data into train and test splits
 africa.train <- africa.data |>
   filter(month_id < 517)
 
 africa.test <- africa.data |>
+  filter(month_id > 528)
+
+# filtering for ME data
+me.data <- df[df$in_middle_east==1,]
+
+me_countries <- unique(me.data$name)
+
+# filtering data into train, eval, test splits
+me.train <- me.data |>
+  filter(month_id < 517)
+
+me.test <- me.data |>
   filter(month_id > 528)
 ```
 
@@ -113,10 +128,10 @@ country_fit <- function(country_name, train, xi = seq(1.1, 1.9, by=0.05))
   param.tw <- tweedie.profile(ged_sb ~ year_factor, 
                               xi.vec=xi,
                               data = country_data,
-                              do.plot=TRUE,
+                              do.plot=FALSE,
                               control=list(maxit=50),
                               method="series",
-                              verbose=2)
+                              verbose=0)
   
   tw <- glm(ged_sb ~ year_factor, 
             data = country_data,
@@ -137,10 +152,120 @@ The plan was simple: isolate country 'c', extract Tweedie parameters through MLE
 
 ##  The Zero-`sb` Problem: The Dirac Delta Function
 
+One of the most significant attributes to our problem, that has contributed to decisions such as the choice of distribution to estimate our parameters, is that most of the data simply has *nothing*. For example, when performing exploratory analysis, 111 out of 195 countries in the world had no data to work with. This is a significant problem when performing MLE estimations. In order for estimations to be calculated, initial data needs to be inputted such that our function can *learn* from the data. So, some steps needed to be traced back in order to find out solution.
+\newline
+The goal of the MLE estimation is to find parameters for our Tweedie distribution, which is a huge family of distributions including the Normal, Poisson, and Gamma distributions respectively. A key attribute of the Tweedie distribution family is the flexibility of the power parameter, $phi$. Different values of $\phi$ represent different distributions; when $\phi = 0$, we are working with a Normal distribution. When $\phi = 1$, a Poisson distribution. The goal of this exercise was partly to present the flexibility of the Tweedie distribution as an adequate model given the flexibility required for our problem. This thought process leads to a couple of requirements for our Tweedie distribution
+
+(i) The probability distribution must center around the value zero: if there are only zeroes in our data, then our mean should equal zero. 
+
+(ii) The distribution should have *no* variance. While this seems initially weird for a probability distribution, the core of this property lies in a simple conclusion: if the data presents nothing but zeroes as our data, why should the the final dsitribution output any other value besides zero?
+
+Introducing: the Dirac-$\delta$ function. This isn't really a function, but rather a probabbility distribution such that 
+
+$$
+
+\delta (x) = 
+\begin{cases}
+  0, & x = 0 \newline
+  \infty & x \neq 0
+\end{cases}
+
+$$
+such that
+
+$$
+
+\int^{\infty}_{-\infty} \delta (x)dx = 1
+
+$$
+
+This probability distribution is plotted as one singular thin line. This "function" is often used in physics and engineering models, however this is an extremely useful plot for our purposes today. In the `country_fit` function, whenever the sum of total `sb` values is zero (meaning we have no data to work with), we can simply assign the parameters of the Tweedie distribution for that specific country to be $\xi = 0, \phi = 0$ respectively. The Dirac-$\delta$ function has proven to be the key in plotting zero-`sb` cases in terms of the Tweedie distribution, maintaining the flexibility of our model 
+
 # Visualizations
 
 ## Africa
 
+```{r, africaplots, include=FALSE}
+# an empty data frame for the data from each country is created
+af_db <- data.frame(name = character(),
+                 gleditsch_ward = integer(),
+                 isonum = integer(),
+                 phi = numeric(),
+                 xi = numeric())
+
+# looping through every country in NA, we are inputting the country name and 
+# training data and outputting that country's fitted parameter list 
+# finally, each list is inputted into the data frame
+
+for(country in af_countries)
+{
+  country_list <- (country_fit(country_name = country, train = africa.train))
+  af_db <- af_db |>
+    add_row(!!!country_list)
+}
+
+# adjusting datasets for easy merging
+
+colnames(africa)[colnames(africa) == "iso_n3"] <- "isonum"
+africa$isonum <- as.numeric(africa$isonum)
+
+# combining SF data with db that we just made
+AF <- merge(africa, af_db, by.x = "isonum", by.y = "isonum")
+```
+
+```{r, africa-visuals}
+#visualizing here...
+ggplot(data = AF) +
+  geom_sf(mapping = aes(fill = pop_est))
+
+ggplot(data = AF) +
+  geom_sf(mapping = aes(fill = log(phi)))
+
+# mapping xi parameters
+ggplot(data = AF) +
+  geom_sf(mapping = aes(fill = log(xi)))
+
+```
+
 ## The Middle East
+
+```{r, MEplots, include = FALSE}
+# an empty data frame for the data from each country is created
+me_db <- data.frame(name = character(),
+                 gleditsch_ward = integer(),
+                 isonum = integer(),
+                 phi = numeric(),
+                 xi = numeric())
+
+# looping through every country in NA, we are inputting the country name and 
+# training data and outputting that country's fitted parameter list 
+# finally, each list is inputted into the data frame
+
+for(country in me_countries)
+{
+  country_list <- (country_fit(country_name = country, train = me.train))
+  me_db <- me_db |>
+    add_row(!!!country_list)
+}
+```
+
+```{r, me-visual}
+# now.. visualizing !
+
+# combining SF data with db that we just made
+ME <- merge(middle_east, me_db)
+
+# testing here
+ggplot(data = ME) +
+  geom_sf(mapping = aes(fill = pop_est))
+
+ggplot(data = ME) +
+  geom_sf(mapping = aes(fill = log(phi)))
+
+# mapping xi parameters
+ggplot(data = ME) +
+  geom_sf(mapping = aes(fill = log(xi)))
+
+```
 
 # Conclusions
