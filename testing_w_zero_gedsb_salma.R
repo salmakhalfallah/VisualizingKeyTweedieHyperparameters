@@ -102,7 +102,6 @@ db <- data.frame(name = character(),
 for(country in no_sb)
 {
   country_list <- (country_fit(country_name = country, train = train))
-  browser()
   db <- db |>
     add_row(!!!country_list)
 }

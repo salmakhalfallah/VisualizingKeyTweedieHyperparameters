@@ -43,7 +43,7 @@ df$month_factor <- factor(df$month_id)
 df <- df |>
   filter(month_id >= 361)
 
-# filtering for africa data
+# filtering for ME data
 me.data <- df[df$in_middle_east==1,]
 
 me_countries <- unique(me.data$name)
@@ -125,7 +125,7 @@ country_fit <- function(country_name, train, xi = seq(1.2, 1.8, by=0.05))
 }
 
 # an empty data frame for the data from each country is created
-db <- data.frame(name = character(),
+me_db <- data.frame(name = character(),
                  gleditsch_ward = integer(),
                  phi = numeric(),
                  xi = numeric(),
@@ -140,16 +140,16 @@ db <- data.frame(name = character(),
 for(country in me_countries)
 {
   country_list <- (country_fit(country_name = country, train = me.train))
-  db <- db |>
+  me_db <- me_db |>
     add_row(!!!country_list)
 }
 
-view(db)
+view(me_db)
 
 # now.. visualizing !
 
 # combining SF data with db that we just made
-ME <- merge(middle_east, db)
+ME <- merge(middle_east, me_db)
 
 # testing here
 ggplot(data = ME) +

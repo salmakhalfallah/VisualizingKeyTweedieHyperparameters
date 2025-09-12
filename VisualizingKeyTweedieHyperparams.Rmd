@@ -25,12 +25,13 @@ library(statmod)
 library(tweedie)
 library(HDtweedie)
 library(scoringutils) 
-
+library(patchwork)
+library(gt)
 ```
 
 ## Data Setup
 
-```{r, DataSetup1, include= TRUE}
+```{r, DataSetup1, include= TRUE, cache=TRUE}
 # loading in data
 load("VIEWS-alldownloaded.RData", verbose = FALSE)
 
@@ -104,6 +105,9 @@ Dividing the data into basic training and test splits in this portion of the cod
 # tweedie, poisson, and negative binomial distributions, as well as MLE estimations
 
 # the parameters of each distribution are saved in a vector and later outputted
+
+# NOTE TO SELF: if working with correlation heat map, look for setting phi = 1 to
+# create a scale invariant problem, key to working w our correlation matrix.
 country_fit <- function(country_name, train, xi = seq(1.1, 1.9, by=0.05)) 
 {
   country_data <- train |>
@@ -163,20 +167,16 @@ The goal of the MLE estimation is to find parameters for our Tweedie distributio
 Introducing: the Dirac-$\delta$ function. This isn't really a function, but rather a probabbility distribution such that 
 
 $$
-
 \delta (x) = 
 \begin{cases}
   0, & x = 0 \newline
   \infty & x \neq 0
 \end{cases}
-
 $$
 such that
 
 $$
-
 \int^{\infty}_{-\infty} \delta (x)dx = 1
-
 $$
 
 This probability distribution is plotted as one singular thin line. This "function" is often used in physics and engineering models, however this is an extremely useful plot for our purposes today. In the `country_fit` function, whenever the sum of total `sb` values is zero (meaning we have no data to work with), we can simply assign the parameters of the Tweedie distribution for that specific country to be $\xi = 0, \phi = 0$ respectively. The Dirac-$\delta$ function has proven to be the key in plotting zero-`sb` cases in terms of the Tweedie distribution, maintaining the flexibility of our model 
@@ -185,7 +185,7 @@ This probability distribution is plotted as one singular thin line. This "functi
 
 ## Africa
 
-```{r, africaplots, include=FALSE}
+```{r, africaplots, include=FALSE, cache=TRUE}
 # an empty data frame for the data from each country is created
 af_db <- data.frame(name = character(),
                  gleditsch_ward = integer(),
@@ -218,18 +218,27 @@ AF <- merge(africa, af_db, by.x = "isonum", by.y = "isonum")
 ggplot(data = AF) +
   geom_sf(mapping = aes(fill = pop_est))
 
-ggplot(data = AF) +
-  geom_sf(mapping = aes(fill = log(phi)))
+# phi parameters
+
+AF <- arrange(AF, desc(phi))
+
+af.phi <- ggplot(data = AF) +
+  geom_sf(mapping = aes(fill = phi))
+
+af.phi + wrap_table(AF[1:10, c('gu_a3', 'phi')], panel = "full")
 
 # mapping xi parameters
-ggplot(data = AF) +
-  geom_sf(mapping = aes(fill = log(xi)))
+AF <- arrange(AF, desc(xi))
 
+af.xi <- ggplot(data = AF) +
+  geom_sf(mapping = aes(fill = xi))
+
+af.xi + wrap_table(AF[1:10, c('gu_a3', 'xi')], panel = "full")
 ```
 
 ## The Middle East
 
-```{r, MEplots, include = FALSE}
+```{r, MEplots, include = FALSE, cache=TRUE}
 # an empty data frame for the data from each country is created
 me_db <- data.frame(name = character(),
                  gleditsch_ward = integer(),
@@ -259,13 +268,14 @@ ME <- merge(middle_east, me_db)
 ggplot(data = ME) +
   geom_sf(mapping = aes(fill = pop_est))
 
-ggplot(data = ME) +
-  geom_sf(mapping = aes(fill = log(phi)))
+me.phi <- ggplot(data = ME) +
+  geom_sf(mapping = aes(fill = phi))
 
 # mapping xi parameters
-ggplot(data = ME) +
-  geom_sf(mapping = aes(fill = log(xi)))
+me.xi <- ggplot(data = ME) +
+  geom_sf(mapping = aes(fill = xi))
 
+me.phi + me.xi
 ```
 
 # Conclusions
